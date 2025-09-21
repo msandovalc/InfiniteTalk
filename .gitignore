@@ -1,0 +1,17 @@
+# Ignorar carpetas de PyCharm
+.idea/
+
+# Ignorar entornos virtuales
+.venv/
+env/
+venv/
+
+# Ignorar archivos de Poetry
+poetry.lock
+
+# Ignorar archivos de Python compilados
+__pycache__/
+*.pyc
+
+# Ignorar archivos de entorno
+.env
