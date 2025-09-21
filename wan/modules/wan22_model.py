@@ -1,4 +1,4 @@
-
+```python
 # File: /kaggle/working/InfiniteTalk/wan/modules/wan22_model.py
 # Copyright 2024-2025 The Alibaba Wan Team Authors. All rights reserved.
 
@@ -9,6 +9,8 @@ from safetensors.torch import load_file
 from optimum.quanto import quantize, qint8
 from .multitalk_model import WanModel
 from ..wan_lora import WanLoraWrapper
+import os
+import json
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -45,9 +47,20 @@ class ModelManager:
                 norm_output_audio=True,
                 weight_init=False  # Disable default weight initialization
             )
-            # Load weights manually
-            checkpoint_path = f"{ckpt_dir}/diffusion_pytorch_model.safetensors"
-            self.model.load_state_dict(load_file(checkpoint_path))
+            # Load weights from sharded safetensors files
+            index_file = os.path.join(ckpt_dir, "diffusion_pytorch_model.safetensors.index.json")
+            if os.path.exists(index_file):
+                with open(index_file, "r") as f:
+                    index = json.load(f)
+                weight_map = index.get("weight_map", {})
+                state_dict = {}
+                for weight_name, shard_file in weight_map.items():
+                    shard_path = os.path.join(ckpt_dir, shard_file)
+                    shard_state_dict = load_file(shard_path)
+                    state_dict.update(shard_state_dict)
+                self.model.load_state_dict(state_dict)
+            else:
+                raise FileNotFoundError(f"Index file {index_file} not found")
             self.model.to(device=device, dtype=torch.float16 if quant == "fp8" else torch.float32)
             if quant == "qint8":
                 quantize(self.model, weights=qint8)
@@ -115,3 +128,4 @@ class Wan22Model:
         except Exception as e:
             logging.error(f"Generation error: {str(e)}")
             raise
+```
