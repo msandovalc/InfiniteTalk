@@ -2,7 +2,7 @@
 import logging
 import importlib  # Added import to fix NameError
 from .configs.wan22_config import Wan22Config
-from ..modules.wan22_model import Wan22Model
+from .modules.wan22_model import Wan22Model
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
