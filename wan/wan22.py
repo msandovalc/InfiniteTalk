@@ -17,15 +17,24 @@ class Wan22Initializer:
         """
         self.ckpt_dir = ckpt_dir
         self.task = task
-        self.config = Wan22Config(ckpt_dir=ckpt_dir, resolution="1024*704").get_config()
 
         try:
             logging.info(f"Initializing Wan2.2 with checkpoint: {self.ckpt_dir} and task: {self.task}")
-            # Simulate environment setup (e.g., check diffsynth version)
-            from diffsynth import __version__ as diffsynth_version
-            if diffsynth_version < '0.2.0':
-                raise ValueError("diffsynth version must be >=0.2.0 for Wan2.2")
-            logging.info("Wan2.2 environment initialized successfully")
+            # Attempt to get diffsynth version safely
+            try:
+                diffsynth_version = importlib.metadata.version('diffsynth')
+            except importlib.metadata.PackageNotFoundError:
+                diffsynth_version = "unknown"  # Fallback if version not found
+            logging.info(f"Using diffsynth version: {diffsynth_version}")
+
+            self.config = Wan22Config(ckpt_dir=ckpt_dir, resolution="1024*704").get_config()
+            self.model = Wan22Model(
+                ckpt_dir=ckpt_dir,
+                task=task,
+                device="cuda",
+                quant="fp8"
+            )
+            logging.info(f"Wan22Initializer initialized for task {task}")
         except ImportError as e:
             logging.error(f"Failed to import diffsynth: {str(e)}")
             raise
