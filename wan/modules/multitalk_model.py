@@ -3,7 +3,7 @@ import math
 import numpy as np
 import os
 import torch
-import torch.cuda.amp as amp
+import torch.amp as amp  # Updated import
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -23,8 +23,6 @@ except:
 
 __all__ = ['WanModel']
 
-
-
 def sinusoidal_embedding_1d(dim, position):
     # preprocess
     assert dim % 2 == 0
@@ -37,10 +35,8 @@ def sinusoidal_embedding_1d(dim, position):
     x = torch.cat([torch.cos(sinusoid), torch.sin(sinusoid)], dim=1)
     return x
 
-
-@amp.autocast(enabled=False)
+@torch.amp.autocast('cuda', enabled=False)  # Updated API
 def rope_params(max_seq_len, dim, theta=10000):
-
     assert dim % 2 == 0
     freqs = torch.outer(
         torch.arange(max_seq_len),
@@ -49,8 +45,7 @@ def rope_params(max_seq_len, dim, theta=10000):
     freqs = torch.polar(torch.ones_like(freqs), freqs)
     return freqs
 
-
-@amp.autocast(enabled=False)
+@torch.amp.autocast('cuda', enabled=False)  # Updated API
 def rope_apply(x, grid_sizes, freqs):
     s, n, c = x.size(1), x.size(2), x.size(3) // 2
 
@@ -75,9 +70,7 @@ def rope_apply(x, grid_sizes, freqs):
         output.append(x_i)
     return torch.stack(output).float()
 
-
 class WanRMSNorm(nn.Module):
-
     def __init__(self, dim, eps=1e-5):
         super().__init__()
         self.dim = dim
@@ -94,9 +87,7 @@ class WanRMSNorm(nn.Module):
     def _norm(self, x):
         return x * torch.rsqrt(x.pow(2).mean(dim=-1, keepdim=True) + self.eps)
 
-
 class WanLayerNorm(nn.LayerNorm):
-
     def __init__(self, dim, eps=1e-6, elementwise_affine=False):
         super().__init__(dim, elementwise_affine=elementwise_affine, eps=eps)
 
@@ -106,14 +97,12 @@ class WanLayerNorm(nn.LayerNorm):
             inputs.float(), 
             self.normalized_shape, 
             None if self.weight is None else self.weight.float(), 
-            None if self.bias is None else self.bias.float() ,
+            None if self.bias is None else self.bias.float(),
             self.eps
         ).to(origin_dtype)
         return out
 
-
 class WanSelfAttention(nn.Module):
-
     def __init__(self,
                  dim,
                  num_heads,
@@ -171,9 +160,7 @@ class WanSelfAttention(nn.Module):
 
         return x, x_ref_attn_map
 
-
 class WanI2VCrossAttention(WanSelfAttention):
-
     def __init__(self,
                  dim,
                  num_heads,
@@ -212,9 +199,7 @@ class WanI2VCrossAttention(WanSelfAttention):
         x = self.o(x)
         return x
 
-
 class WanAttentionBlock(nn.Module):
-
     def __init__(self,
                  cross_attn_type,
                  dim,
@@ -244,10 +229,10 @@ class WanAttentionBlock(nn.Module):
             dim, eps,
             elementwise_affine=True) if cross_attn_norm else nn.Identity()
         self.cross_attn = WanI2VCrossAttention(dim,
-                                                num_heads,
-                                                (-1, -1),
-                                                qk_norm,
-                                                eps)
+                                              num_heads,
+                                              (-1, -1),
+                                              qk_norm,
+                                              eps)
         self.norm2 = WanLayerNorm(dim, eps)
         self.ffn = nn.Sequential(
             nn.Linear(dim, ffn_dim), nn.GELU(approximate='tanh'),
@@ -268,8 +253,7 @@ class WanAttentionBlock(nn.Module):
                 class_range=class_range,
                 class_interval=class_interval
             )
-        self.norm_x = WanLayerNorm(dim, eps, elementwise_affine=True)  if norm_input_visual else nn.Identity()
-        
+        self.norm_x = WanLayerNorm(dim, eps, elementwise_affine=True) if norm_input_visual else nn.Identity()
 
     def forward(
         self,
@@ -284,7 +268,6 @@ class WanAttentionBlock(nn.Module):
         ref_target_masks=None,
         human_num=None,
     ):
-
         dtype = x.dtype
         assert e.dtype == torch.float32
         with amp.autocast(dtype=torch.float32):
@@ -305,21 +288,17 @@ class WanAttentionBlock(nn.Module):
 
         # cross attn of audio
         x_a = self.audio_cross_attn(self.norm_x(x), encoder_hidden_states=audio_embedding,
-                                        shape=grid_sizes[0], x_ref_attn_map=x_ref_attn_map, human_num=human_num)
+                                    shape=grid_sizes[0], x_ref_attn_map=x_ref_attn_map, human_num=human_num)
         x = x + x_a
 
         y = self.ffn((self.norm2(x).float() * (1 + e[4]) + e[3]).to(dtype))
         with amp.autocast(dtype=torch.float32):
             x = x + y * e[5]
 
-
         x = x.to(dtype)
-
         return x
 
-
 class Head(nn.Module):
-
     def __init__(self, dim, out_dim, patch_size, eps=1e-6):
         super().__init__()
         self.dim = dim
@@ -347,12 +326,9 @@ class Head(nn.Module):
             x = (self.head(self.norm(x) * (1 + e[1]) + e[0]))
         return x
 
-
 class MLPProj(torch.nn.Module):
-
     def __init__(self, in_dim, out_dim):
         super().__init__()
-
         self.proj = torch.nn.Sequential(
             torch.nn.LayerNorm(in_dim), torch.nn.Linear(in_dim, in_dim),
             torch.nn.GELU(), torch.nn.Linear(in_dim, out_dim),
@@ -361,7 +337,6 @@ class MLPProj(torch.nn.Module):
     def forward(self, image_embeds):
         clip_extra_context_tokens = self.proj(image_embeds)
         return clip_extra_context_tokens
-
 
 class AudioProjModel(ModelMixin, ConfigMixin):
     def __init__(
@@ -376,7 +351,6 @@ class AudioProjModel(ModelMixin, ConfigMixin):
         norm_output_audio=False,
     ):
         super().__init__()
-
         self.seq_len = seq_len
         self.blocks = blocks
         self.channels = channels
@@ -428,12 +402,10 @@ class AudioProjModel(ModelMixin, ConfigMixin):
 
         return context_tokens
 
-
 class WanModel(ModelMixin, ConfigMixin):
     r"""
     Wan diffusion backbone supporting both text-to-video and image-to-video.
     """
-
     ignore_for_config = [
         'patch_size', 'cross_attn_norm', 'qk_norm', 'text_dim', 'window_size'
     ]
@@ -445,8 +417,8 @@ class WanModel(ModelMixin, ConfigMixin):
                  patch_size=(1, 2, 2),
                  text_len=512,
                  in_dim=16,
-                 dim=2048,
-                 ffn_dim=8192,
+                 dim=5120,  # Updated to match checkpoint
+                 ffn_dim=13824,  # Updated to match checkpoint
                  freq_dim=256,
                  text_dim=4096,
                  out_dim=16,
@@ -462,7 +434,6 @@ class WanModel(ModelMixin, ConfigMixin):
                  output_dim=768,
                  context_tokens=32,
                  vae_scale=4, # vae timedownsample scale
-
                  norm_input_visual=True,
                  norm_output_audio=True,
                  weight_init=True):
@@ -486,13 +457,11 @@ class WanModel(ModelMixin, ConfigMixin):
         self.cross_attn_norm = cross_attn_norm
         self.eps = eps
 
-
         self.norm_output_audio = norm_output_audio
         self.audio_window = audio_window
         self.intermediate_dim = intermediate_dim
         self.vae_scale = vae_scale
         
-
         # embeddings
         self.patch_embedding = nn.Conv3d(
             in_dim, dim, kernel_size=patch_size, stride=patch_size)
@@ -540,7 +509,6 @@ class WanModel(ModelMixin, ConfigMixin):
                     norm_output_audio=norm_output_audio,
                 )
 
-
         # initialize weights
         if weight_init:
             self.init_weights()
@@ -585,7 +553,6 @@ class WanModel(ModelMixin, ConfigMixin):
         else:
             if model_scale == 'infinitetalk-480':
                 self.__class__.coefficients = [-3.02331670e+02,  2.23948934e+02, -5.25463970e+01,  5.87348440e+00, -2.01973289e-01]
-        
             if model_scale == 'infinitetalk-720':
                 self.__class__.coefficients = [-114.36346466,   65.26524496,  -18.82220707,    4.91518089,   -0.23412683]
             self.__class__.ret_steps = 1*3
@@ -650,7 +617,6 @@ class WanModel(ModelMixin, ConfigMixin):
             context_clip = self.img_emb(clip_fea) 
             context = torch.concat([context_clip, context], dim=1).to(x.dtype)
 
-        
         audio_cond = audio.to(device=x.device, dtype=x.dtype)
         first_frame_audio_emb_s = audio_cond[:, :1, ...] 
         latter_frame_audio_emb = audio_cond[:, 1:, ...] 
@@ -666,7 +632,6 @@ class WanModel(ModelMixin, ConfigMixin):
         audio_embedding = self.audio_proj(first_frame_audio_emb_s, latter_frame_audio_emb_s) 
         human_num = len(audio_embedding)
         audio_embedding = torch.concat(audio_embedding.split(1), dim=2).to(x.dtype)
-
 
         # convert ref_target_masks to token_ref_target_masks
         if ref_target_masks is not None:
@@ -731,11 +696,11 @@ class WanModel(ModelMixin, ConfigMixin):
             audio_embedding=audio_embedding,
             ref_target_masks=token_ref_target_masks,
             human_num=human_num,
-            )
+        )
         if self.enable_teacache:
             if self.cnt%3==0:
                 if not should_calc_cond:
-                    x +=  self.previous_residual_cond
+                    x += self.previous_residual_cond
                 else:
                     ori_x = x.clone()
                     for block in self.blocks:
@@ -743,7 +708,7 @@ class WanModel(ModelMixin, ConfigMixin):
                     self.previous_residual_cond = x - ori_x
             elif self.cnt%3==1:
                 if not should_calc_drop_text:
-                    x +=  self.previous_residual_drop_text
+                    x += self.previous_residual_drop_text
                 else:
                     ori_x = x.clone()
                     for block in self.blocks:
@@ -751,7 +716,7 @@ class WanModel(ModelMixin, ConfigMixin):
                     self.previous_residual_drop_text = x - ori_x
             else:
                 if not should_calc_uncond:
-                    x +=  self.previous_residual_uncond
+                    x += self.previous_residual_uncond
                 else:
                     ori_x = x.clone()
                     for block in self.blocks:
@@ -773,7 +738,6 @@ class WanModel(ModelMixin, ConfigMixin):
 
         return torch.stack(x).float()
 
-
     def unpatchify(self, x, grid_sizes):
         r"""
         Reconstruct video tensors from patch embeddings.
@@ -789,7 +753,6 @@ class WanModel(ModelMixin, ConfigMixin):
             List[Tensor]:
                 Reconstructed video tensors with shape [C_out, F, H / 8, W / 8]
         """
-
         c = self.out_dim
         out = []
         for u, v in zip(x, grid_sizes.tolist()):
@@ -803,7 +766,6 @@ class WanModel(ModelMixin, ConfigMixin):
         r"""
         Initialize model parameters using Xavier initialization.
         """
-
         # basic init
         for m in self.modules():
             if isinstance(m, nn.Linear):

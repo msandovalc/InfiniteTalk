@@ -27,8 +27,8 @@ class ModelManager:
                 patch_size=(1, 2, 2),
                 text_len=512,
                 in_dim=16,
-                dim=2048,
-                ffn_dim=8192,
+                dim=5120,  # Updated to match checkpoint
+                ffn_dim=13824,  # Updated to match checkpoint
                 freq_dim=256,
                 text_dim=4096,
                 out_dim=16,
