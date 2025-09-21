@@ -21,11 +21,34 @@ class ModelManager:
         self.quant = quant
         try:
             self.model = WanModel(
-                weight_init=False,
-                checkpoint_path=f"{ckpt_dir}/diffusion_pytorch_model.safetensors",
-                device=device,
-                dtype=torch.float16 if quant == "fp8" else torch.float32
+                model_type="i2v",
+                patch_size=(1, 2, 2),
+                text_len=512,
+                in_dim=16,
+                dim=2048,
+                ffn_dim=8192,
+                freq_dim=256,
+                text_dim=4096,
+                out_dim=16,
+                num_heads=16,
+                num_layers=32,
+                window_size=(-1, -1),
+                qk_norm=True,
+                cross_attn_norm=True,
+                eps=1e-6,
+                audio_window=5,
+                intermediate_dim=512,
+                output_dim=768,
+                context_tokens=32,
+                vae_scale=4,
+                norm_input_visual=True,
+                norm_output_audio=True,
+                weight_init=False  # Disable default weight initialization
             )
+            # Load weights manually
+            checkpoint_path = f"{ckpt_dir}/diffusion_pytorch_model.safetensors"
+            self.model.load_state_dict(load_file(checkpoint_path))
+            self.model.to(device=device, dtype=torch.float16 if quant == "fp8" else torch.float32)
             if quant == "qint8":
                 quantize(self.model, weights=qint8)
                 logging.info("Model quantized to qint8")
