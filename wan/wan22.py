@@ -1,5 +1,6 @@
 # File: F:\Development\PyCharm\Projects\InfiniteTalk\wan\wan22.py
 import logging
+from .configs.wan22_config import Wan22Config
 
 logging.basicConfig(level=logging.INFO)
 
@@ -16,6 +17,8 @@ class Wan22Initializer:
         """
         self.ckpt_dir = ckpt_dir
         self.task = task
+        self.config = Wan22Config(ckpt_dir=ckpt_dir, resolution="1024*704").get_config()
+
         try:
             logging.info(f"Initializing Wan2.2 with checkpoint: {self.ckpt_dir} and task: {self.task}")
             # Simulate environment setup (e.g., check diffsynth version)
