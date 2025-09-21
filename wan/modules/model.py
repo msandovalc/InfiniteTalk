@@ -2,7 +2,7 @@
 import math
 
 import torch
-import torch.cuda.amp as amp
+import torch.amp as amp  # Updated import
 import torch.nn as nn
 from diffusers.configuration_utils import ConfigMixin, register_to_config
 from diffusers.models.modeling_utils import ModelMixin
@@ -28,7 +28,7 @@ def sinusoidal_embedding_1d(dim, position):
     return x
 
 
-@amp.autocast(enabled=False)
+@torch.amp.autocast('cuda', enabled=False)  # Updated API (line 31)
 def rope_params(max_seq_len, dim, theta=10000):
     assert dim % 2 == 0
     freqs = torch.outer(
@@ -39,7 +39,7 @@ def rope_params(max_seq_len, dim, theta=10000):
     return freqs
 
 
-@amp.autocast(enabled=False)
+@torch.amp.autocast('cuda', enabled=False)  # Updated API (line 42)
 def rope_apply(x, grid_sizes, freqs):
     n, c = x.size(2), x.size(3) // 2
 
