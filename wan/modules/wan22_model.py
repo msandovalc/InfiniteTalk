@@ -1,4 +1,4 @@
-```python
+
 # File: /kaggle/working/InfiniteTalk/wan/modules/wan22_model.py
 # Copyright 2024-2025 The Alibaba Wan Team Authors. All rights reserved.
 
@@ -128,4 +128,3 @@ class Wan22Model:
         except Exception as e:
             logging.error(f"Generation error: {str(e)}")
             raise
-```
